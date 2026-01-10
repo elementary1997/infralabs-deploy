@@ -46,13 +46,22 @@ if [ ! -f .env ]; then
     # Генерация SECRET_KEY
     echo -e "${CYAN}🔑 Генерация SECRET_KEY...${NC}"
     SECRET_KEY=$(python3 -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())" 2>/dev/null || \
-                 openssl rand -base64 50 | tr -d "=+/" | cut -c1-50)
+                 openssl rand -hex 32)
     
-    # Замена SECRET_KEY в .env (работает на Linux и macOS)
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s|your-secret-key-change-this-in-production|${SECRET_KEY}|" .env
+    # Замена SECRET_KEY в .env используя awk (более надежный метод)
+    # awk правильно обрабатывает специальные символы
+    if command -v awk &> /dev/null; then
+        awk -v key="$SECRET_KEY" '{gsub(/your-secret-key-change-this-in-production/, key)}1' .env > .env.tmp && mv .env.tmp .env
     else
-        sed -i "s|your-secret-key-change-this-in-production|${SECRET_KEY}|" .env
+        # Fallback: используем Python если awk недоступен
+        python3 << PYEOF
+import sys
+with open('.env', 'r') as f:
+    content = f.read()
+content = content.replace('your-secret-key-change-this-in-production', '${SECRET_KEY}')
+with open('.env', 'w') as f:
+    f.write(content)
+PYEOF
     fi
     
     echo -e "${GREEN}✅ .env файл создан с автоматически сгенерированным SECRET_KEY${NC}"
@@ -72,19 +81,30 @@ if [ -z "$ALLOWED_HOSTS_INPUT" ]; then
     echo -e "   ${YELLOW}Используется значение по умолчанию: ${ALLOWED_HOSTS_INPUT}${NC}"
 fi
 
-# Обновление ALLOWED_HOSTS в .env
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS_INPUT}|" .env
+# Обновление ALLOWED_HOSTS в .env используя awk
+if command -v awk &> /dev/null; then
+    awk -v hosts="$ALLOWED_HOSTS_INPUT" '/^DJANGO_ALLOWED_HOSTS=/ {print "DJANGO_ALLOWED_HOSTS=" hosts; next} 1' .env > .env.tmp && mv .env.tmp .env
 else
-    sed -i "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS_INPUT}|" .env
+    # Fallback: используем sed (может работать неправильно со специальными символами)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS_INPUT}|" .env
+    else
+        sed -i "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS_INPUT}|" .env
+    fi
 fi
 
 # Обновление CORS_ALLOWED_ORIGINS на основе ALLOWED_HOSTS
-CORS_ORIGINS=$(echo "$ALLOWED_HOSTS_INPUT" | sed 's/,/\n/g' | sed 's/^/http:\/\//' | sed 's/^http:\/\/localhost/http:\/\/localhost/' | tr '\n' ',' | sed 's/,$//')
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${CORS_ORIGINS}|" .env
+# Преобразуем хосты в HTTP URL через запятую
+CORS_ORIGINS=$(echo "$ALLOWED_HOSTS_INPUT" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^/http:\/\//' | tr '\n' ',' | sed 's/,$//')
+
+if command -v awk &> /dev/null; then
+    awk -v origins="$CORS_ORIGINS" '/^CORS_ALLOWED_ORIGINS=/ {print "CORS_ALLOWED_ORIGINS=" origins; next} 1' .env > .env.tmp && mv .env.tmp .env
 else
-    sed -i "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${CORS_ORIGINS}|" .env
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${CORS_ORIGINS}|" .env
+    else
+        sed -i "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${CORS_ORIGINS}|" .env
+    fi
 fi
 
 echo -e "${GREEN}✅ ALLOWED_HOSTS настроен: ${ALLOWED_HOSTS_INPUT}${NC}"
@@ -101,11 +121,15 @@ if [ -z "$ADMIN_PASS" ]; then
     echo -e "   ${YELLOW}Используется пароль по умолчанию: admin123${NC}"
 fi
 
-# Обновление ADMIN_PASSWORD в .env
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_PASS}|" .env
+# Обновление ADMIN_PASSWORD в .env используя awk
+if command -v awk &> /dev/null; then
+    awk -v pass="$ADMIN_PASS" '/^ADMIN_PASSWORD=/ {print "ADMIN_PASSWORD=" pass; next} 1' .env > .env.tmp && mv .env.tmp .env
 else
-    sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_PASS}|" .env
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_PASS}|" .env
+    else
+        sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_PASS}|" .env
+    fi
 fi
 
 echo -e "${GREEN}✅ Пароль администратора настроен${NC}"
@@ -121,11 +145,15 @@ if [ -z "$POSTGRES_PASS" ]; then
     echo -e "   ${YELLOW}Сгенерирован случайный пароль${NC}"
 fi
 
-# Обновление POSTGRES_PASSWORD в .env
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASS}|" .env
+# Обновление POSTGRES_PASSWORD в .env используя awk
+if command -v awk &> /dev/null; then
+    awk -v pass="$POSTGRES_PASS" '/^POSTGRES_PASSWORD=/ {print "POSTGRES_PASSWORD=" pass; next} 1' .env > .env.tmp && mv .env.tmp .env
 else
-    sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASS}|" .env
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASS}|" .env
+    else
+        sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASS}|" .env
+    fi
 fi
 
 echo -e "${GREEN}✅ Пароль PostgreSQL настроен${NC}"
