@@ -21,18 +21,38 @@ OperationalError: password authentication failed for user "infralabs_user"
 
 ## Решения
 
-### Вариант 1: Первый запуск с нуля (рекомендуется)
+### Вариант 1: Первый запуск с нуля (рекомендуется) ⭐
 
-Если это первый запуск и нет важных данных:
+**Используйте скрипт init.sh - он автоматически обработает все:**
 
 ```bash
 cd /path/to/infralabs-deploy
 
+# 1. Удалите маркер инициализации (если был создан ранее)
+rm -f .db_initialized
+
+# 2. Запустите скрипт инициализации
+./scripts/init.sh
+```
+
+Скрипт автоматически:
+- Определит, что это первый запуск
+- Предложит удалить существующий volume БД (если есть)
+- Создаст новый volume с правильным паролем
+- Настроит все переменные окружения
+
+**Или вручную:**
+
+```bash
 # 1. Остановите контейнеры
 docker-compose down
 
 # 2. Удалите volume с данными БД (⚠️ удалит все данные!)
-docker volume rm infralabs-deploy_postgres_data
+docker-compose down -v
+
+# Или конкретный volume:
+docker volume ls | grep postgres_data  # Найдите volume
+docker volume rm <имя_volume>
 
 # 3. Запустите скрипт инициализации заново
 ./scripts/init.sh

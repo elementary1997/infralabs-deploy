@@ -46,7 +46,15 @@ if [ "${RECREATE}" = "yes" ]; then
     docker-compose down || true
     
     echo "🗑️  Удаление volume БД..."
-    docker volume rm $(docker volume ls --format "{{.Name}}" | grep -E "(postgres_data|infralabs.*postgres_data)" | head -1) 2>/dev/null || \
+    # Находим все volumes связанные с postgres
+    VOLUMES=$(docker volume ls --format "{{.Name}}" | grep -E "(postgres_data|infralabs.*postgres_data|infralabs-deploy.*postgres_data)" || echo "")
+    if [ -n "$VOLUMES" ]; then
+        echo "$VOLUMES" | while read vol; do
+            echo "   Удаление volume: $vol"
+            docker volume rm "$vol" 2>/dev/null || true
+        done
+    fi
+    # Дополнительная очистка через docker-compose
     docker-compose down -v 2>/dev/null || true
     
     echo "🔄 Обновление DATABASE_URL..."

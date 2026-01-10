@@ -14,7 +14,8 @@ services:
     environment:
       - POSTGRES_DB=infralabs
       - POSTGRES_USER=infralabs_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-infralabs_pass_change_in_prod}
+      # POSTGRES_PASSWORD должен быть экспортирован перед запуском docker-compose
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U infralabs_user"]
       interval: 10s

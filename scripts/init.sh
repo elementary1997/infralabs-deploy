@@ -177,62 +177,105 @@ echo ""
 
 # Проверяем, существует ли volume с данными БД
 # Ищем volume по имени (может быть с префиксом проекта)
-DB_VOLUME_NAME=$(docker volume ls --format "{{.Name}}" | grep -E "(postgres_data|infralabs.*postgres_data)" | head -1 || echo "")
+DB_VOLUME_NAME=$(docker volume ls --format "{{.Name}}" | grep -E "(postgres_data|infralabs.*postgres_data|infralabs-deploy.*postgres_data)" | head -1 || echo "")
 
-if [ -n "$DB_VOLUME_NAME" ] && [ ! -f .db_initialized ]; then
-    echo -e "${YELLOW}⚠️  Обнаружен существующий volume с данными БД: ${DB_VOLUME_NAME}${NC}"
-    echo "   Если вы меняете пароль PostgreSQL, необходимо пересоздать БД."
-    echo "   ВАЖНО: Это удалит все существующие данные в БД!"
-    echo ""
-    read -p "   Пересоздать БД с новым паролем? (yes/no): " RECREATE_DB
-    if [ "${RECREATE_DB}" = "yes" ]; then
-        echo "🗑️  Удаление существующего volume БД..."
-        docker-compose down -v 2>/dev/null || true
-        # Пытаемся удалить volume по имени, если docker-compose не удалил
-        if docker volume inspect "$DB_VOLUME_NAME" >/dev/null 2>&1; then
-            docker volume rm "$DB_VOLUME_NAME" 2>/dev/null || true
+# Если это первый запуск (нет маркера .db_initialized), удаляем существующий volume
+if [ ! -f .db_initialized ]; then
+    if [ -n "$DB_VOLUME_NAME" ]; then
+        echo -e "${YELLOW}⚠️  Обнаружен существующий volume с данными БД: ${DB_VOLUME_NAME}${NC}"
+        echo "   Это первый запуск через init.sh - volume будет удален для корректной инициализации БД."
+        echo "   ВАЖНО: Это удалит все существующие данные в БД!"
+        echo ""
+        read -p "   Продолжить и удалить существующий volume? (yes/no): " DELETE_VOLUME
+        if [ "${DELETE_VOLUME}" != "yes" ]; then
+            echo -e "${RED}❌ Отменено. Запустите скрипт заново и выберите 'yes' для удаления volume.${NC}"
+            exit 1
         fi
-        touch .db_initialized
+        echo "🗑️  Удаление существующего volume БД..."
+        
+        # Остановка контейнеров если они запущены
+        docker-compose down 2>/dev/null || true
+        
+        # Удаление volume
+        if docker volume inspect "$DB_VOLUME_NAME" >/dev/null 2>&1; then
+            docker volume rm "$DB_VOLUME_NAME" 2>/dev/null || {
+                echo -e "${YELLOW}⚠️  Не удалось удалить volume автоматически. Пытаемся через docker-compose...${NC}"
+                docker-compose down -v 2>/dev/null || true
+            }
+        fi
+        
+        # Пытаемся найти и удалить все связанные volumes
+        docker volume ls --format "{{.Name}}" | grep -E "(postgres_data|infralabs)" | while read vol; do
+            if echo "$vol" | grep -q "postgres"; then
+                echo "   Удаление volume: $vol"
+                docker volume rm "$vol" 2>/dev/null || true
+            fi
+        done
+        
         echo -e "${GREEN}✅ Volume удален${NC}"
     else
-        echo -e "${YELLOW}⚠️  Используется существующая БД. Убедитесь, что пароль в .env совпадает с паролем БД.${NC}"
-        echo "   Если пароли не совпадают, используйте существующий пароль или удалите volume вручную:"
-        echo "   docker-compose down -v"
+        echo -e "${GREEN}✅ Первый запуск - БД будет создана с новым паролем${NC}"
     fi
-elif [ ! -f .db_initialized ]; then
-    echo -e "${GREEN}✅ Первый запуск - БД будет создана с новым паролем${NC}"
     touch .db_initialized
+else
+    if [ -n "$DB_VOLUME_NAME" ]; then
+        echo -e "${CYAN}ℹ️  Используется существующий volume БД: ${DB_VOLUME_NAME}${NC}"
+        echo "   Если пароль не совпадает, используйте: ./scripts/fix-db-password.sh"
+    fi
 fi
 
 # Экспортируем переменные из .env для docker-compose
 # Это необходимо, чтобы переменные были доступны при запуске docker-compose
 echo "📋 Загрузка переменных окружения из .env..."
 
-# Явно экспортируем критичные переменные
+# Явно экспортируем критичные переменные ПЕРЕД загрузкой .env
 export POSTGRES_PASSWORD="$POSTGRES_PASS"
 export DATABASE_URL="postgresql://infralabs_user:${POSTGRES_PASS}@db:5432/infralabs"
 
-# Загружаем остальные переменные из .env (для использования в docker-compose)
-if [ -f .env ]; then
-    # Используем source для загрузки переменных из .env
-    # Игнорируем ошибки, если есть проблемные символы
-    set -a
-    source .env 2>/dev/null || {
-        # Если source не сработал, загружаем основные переменные вручную
-        export DJANGO_SECRET_KEY=$(grep "^DJANGO_SECRET_KEY=" .env | cut -d '=' -f2- | tr -d '"' || echo "")
-        export DJANGO_DEBUG=$(grep "^DJANGO_DEBUG=" .env | cut -d '=' -f2 | tr -d '"' || echo "True")
-        export DJANGO_ALLOWED_HOSTS=$(grep "^DJANGO_ALLOWED_HOSTS=" .env | cut -d '=' -f2- | tr -d '"' || echo "localhost,127.0.0.1")
-    }
-    set +a
+# Проверка, что пароль установлен
+if [ -z "$POSTGRES_PASSWORD" ] || [ "$POSTGRES_PASSWORD" = "" ]; then
+    echo -e "${RED}❌ Ошибка: POSTGRES_PASSWORD не установлен!${NC}"
+    echo "   Проверьте значение POSTGRES_PASS в скрипте"
+    exit 1
 fi
 
-# Проверка, что пароль установлен
-if [ -z "$POSTGRES_PASSWORD" ]; then
-    echo -e "${RED}❌ Ошибка: POSTGRES_PASSWORD не установлен!${NC}"
+# Загружаем остальные переменные из .env (для использования в docker-compose)
+if [ -f .env ]; then
+    # Используем безопасный способ загрузки переменных из .env
+    set -a
+    # Загружаем только непустые строки с переменными (игнорируем комментарии и пустые строки)
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Пропускаем комментарии и пустые строки
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        # Проверяем что строка содержит =
+        [[ "$line" != *"="* ]] && continue
+        # Экспортируем переменную (безопасно)
+        key="${line%%=*}"
+        value="${line#*=}"
+        # Убираем пробелы
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+        # Пропускаем если ключ или значение пустые
+        [[ -z "$key" ]] && continue
+        # Не перезаписываем уже установленный POSTGRES_PASSWORD
+        [[ "$key" == "POSTGRES_PASSWORD" ]] && continue
+        # Экспортируем
+        export "$key=$value"
+    done < .env
+    set +a
+else
+    echo -e "${YELLOW}⚠️  Файл .env не найден!${NC}"
+fi
+
+# Финальная проверка POSTGRES_PASSWORD
+if [ -z "$POSTGRES_PASSWORD" ] || [ "$POSTGRES_PASSWORD" = "" ]; then
+    echo -e "${RED}❌ КРИТИЧЕСКАЯ ОШИБКА: POSTGRES_PASSWORD пустой после загрузки .env!${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}✅ Переменные окружения загружены${NC}"
+echo "   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:0:10}... (длина: ${#POSTGRES_PASSWORD})"
 echo ""
 
 docker-compose pull
@@ -241,8 +284,66 @@ docker-compose pull
 echo "🛑 Остановка существующих контейнеров (если есть)..."
 docker-compose down 2>/dev/null || true
 
+# Убеждаемся, что контейнер БД полностью остановлен перед запуском
+echo "⏳ Ожидание полной остановки контейнеров..."
+sleep 2
+
 echo "🚀 Запуск контейнеров..."
-echo "   POSTGRES_PASSWORD установлен: ${POSTGRES_PASSWORD:0:10}..."
+echo "   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:0:15}..."
+echo "   DATABASE_URL: postgresql://infralabs_user:*****@db:5432/infralabs"
+
+# Сначала запускаем только БД для инициализации
+echo "📦 Запуск базы данных..."
+docker-compose up -d db
+
+# Ждем готовности БД
+echo "⏳ Ожидание готовности базы данных..."
+DB_READY=false
+for i in {1..60}; do
+    if docker-compose exec -T db pg_isready -U infralabs_user >/dev/null 2>&1; then
+        # Проверяем подключение с паролем
+        if docker-compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+            psql -U infralabs_user -d infralabs -c "SELECT 1;" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ База данных готова и пароль корректен${NC}"
+            DB_READY=true
+            break
+        else
+            echo -e "${YELLOW}⚠️  БД запущена, но пароль не совпадает. Возможно, используется старый volume...${NC}"
+            if [ $i -lt 60 ]; then
+                echo "   Попытка $i/60... (PostgreSQL может еще инициализироваться)"
+                sleep 2
+                continue
+            fi
+        fi
+    fi
+    if [ $i -eq 60 ]; then
+        echo -e "${RED}❌ База данных не запустилась или пароль неверный${NC}"
+        echo ""
+        echo "   Возможные причины:"
+        echo "   1. Volume БД содержит старый пароль"
+        echo "   2. База данных не успела инициализироваться"
+        echo ""
+        echo "   Решение:"
+        echo "   docker-compose down -v  # Удалит volume БД"
+        echo "   ./scripts/init.sh       # Запустите скрипт заново"
+        echo ""
+        echo "   Или используйте скрипт исправления:"
+        echo "   ./scripts/fix-db-password.sh"
+        echo ""
+        echo "   Логи БД:"
+        docker-compose logs db | tail -20
+        exit 1
+    fi
+    sleep 1
+done
+
+if [ "$DB_READY" != "true" ]; then
+    echo -e "${RED}❌ Не удалось подтвердить корректность подключения к БД${NC}"
+    exit 1
+fi
+
+# Теперь запускаем остальные сервисы
+echo "🚀 Запуск остальных сервисов..."
 docker-compose up -d
 
 echo ""
