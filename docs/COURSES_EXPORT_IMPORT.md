@@ -54,17 +54,28 @@ docker exec infralabs_web python manage.py export_courses \
 
 ## Импорт курсов
 
-### Базовый импорт
+### Базовый импорт (умное обновление) ⭐
 
-Создает новые курсы, модули, уроки и упражнения:
+**По умолчанию** импорт работает в режиме "умного обновления":
+- Создает новые элементы, если их нет
+- Обновляет существующие, **только если изменилось содержимое**
+- Не трогает элементы, которые не изменились
 
 ```bash
 ./scripts/import-courses.sh ./exports/courses_export_20250110_120000.json
 ```
 
-### Обновление существующих
+### Удаление тестовых данных перед импортом
 
-Обновляет существующие элементы (по slug) вместо создания новых:
+Удаляет тестовые модули (ansible-basics, playbooks-roles, advanced-ansible) и все связанные уроки/упражнения:
+
+```bash
+./scripts/import-courses.sh ./exports/courses_export.json --clear-demo
+```
+
+### Принудительное обновление всех существующих
+
+Обновляет все существующие элементы, даже если содержимое не изменилось:
 
 ```bash
 ./scripts/import-courses.sh ./exports/courses_export.json --update
@@ -72,7 +83,7 @@ docker exec infralabs_web python manage.py export_courses \
 
 ### Пропуск существующих
 
-Пропускает элементы, которые уже существуют:
+Пропускает элементы, которые уже существуют (не создает и не обновляет):
 
 ```bash
 ./scripts/import-courses.sh ./exports/courses_export.json --skip-existing

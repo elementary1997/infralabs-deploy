@@ -24,9 +24,12 @@ if [ -z "$1" ]; then
     echo "Использование: $0 <json_file> [--update] [--skip-existing] [--restore-ids]"
     echo ""
     echo "Параметры:"
-    echo "  --update         - Обновлять существующие элементы вместо создания новых"
+    echo "  --update         - Принудительно обновлять существующие элементы"
     echo "  --skip-existing  - Пропускать существующие элементы"
     echo "  --restore-ids    - Восстанавливать оригинальные ID (удалит все существующие данные!)"
+    echo "  --clear-demo     - Удалить тестовые данные (demo модули) перед импортом"
+    echo ""
+    echo "По умолчанию: умное обновление (обновляет только если изменилось содержимое)"
     echo ""
     echo "Примеры:"
     echo "  $0 ./exports/courses_export_20250110_120000.json"
@@ -69,6 +72,12 @@ if [[ "$@" == *"--restore-ids"* ]]; then
         echo "Импорт отменен."
         exit 0
     fi
+fi
+
+# Информация о clear-demo
+if [[ "$@" == *"--clear-demo"* ]]; then
+    echo -e "${YELLOW}ℹ️  Будет удалено: тестовые модули (ansible-basics, playbooks-roles, advanced-ansible) и все связанные уроки/упражнения${NC}"
+    echo ""
 fi
 
 # Копирование файла в контейнер

@@ -282,13 +282,19 @@ docker-compose up -d db
 ### Импорт курсов
 
 ```bash
-# Создание новых элементов
+# Базовый импорт (умное обновление по умолчанию) ⭐
+# - Создает новые элементы
+# - Обновляет существующие только если изменилось содержимое
+# - Не трогает неизмененные элементы
 ./scripts/import-courses.sh ./exports/courses_export_20250110_120000.json
 
-# Обновление существующих (по slug)
+# Удаление тестовых данных перед импортом
+./scripts/import-courses.sh ./exports/courses_export.json --clear-demo
+
+# Принудительное обновление всех существующих
 ./scripts/import-courses.sh ./exports/courses_export.json --update
 
-# Пропуск существующих
+# Пропуск существующих (не создает и не обновляет)
 ./scripts/import-courses.sh ./exports/courses_export.json --skip-existing
 
 # Восстановление оригинальных ID (⚠️ удалит все существующие данные!)
