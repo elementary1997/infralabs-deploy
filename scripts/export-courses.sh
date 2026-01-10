@@ -72,9 +72,9 @@ if [ "$INCLUDE_UNPUBLISHED" = "true" ]; then
     EXPORT_CMD="${EXPORT_CMD} --include-unpublished"
 fi
 
-# Выполнение экспорта
+# Выполнение экспорта (в рабочей директории /app)
 echo "🔄 Выполнение экспорта..."
-docker exec ${CONTAINER_NAME} ${EXPORT_CMD}
+docker exec -w /app ${CONTAINER_NAME} sh -c "${EXPORT_CMD}"
 
 # Копирование файла из контейнера
 CONTAINER_FILE="/tmp/courses_export.json"

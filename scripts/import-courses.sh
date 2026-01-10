@@ -78,8 +78,34 @@ docker cp "${INPUT_FILE}" ${CONTAINER_NAME}:${CONTAINER_FILE}
 
 # Выполнение импорта
 echo "📥 Выполнение импорта..."
-IMPORT_CMD="python manage.py import_courses ${CONTAINER_FILE} $@"
-docker exec ${CONTAINER_NAME} ${IMPORT_CMD}
+
+# Проверяем, что команда доступна (в рабочей директории /app)
+if ! docker exec -w /app ${CONTAINER_NAME} python manage.py help import_courses >/dev/null 2>&1; then
+    echo -e "${RED}❌ Ошибка: команда 'import_courses' не найдена в контейнере!${NC}"
+    echo ""
+    echo "   Возможные причины:"
+    echo "   1. Образ Docker не содержит management команды"
+    echo "   2. Нужно обновить образ: docker-compose pull"
+    echo "   3. Контейнер не запущен или поврежден"
+    echo ""
+    echo "   Попробуйте выполнить команду вручную:"
+    echo "   docker exec -w /app ${CONTAINER_NAME} python manage.py import_courses ${CONTAINER_FILE}"
+    exit 1
+fi
+
+# Выполняем команду в рабочей директории /app
+# Используем sh -c для правильной обработки всех аргументов
+if [ $# -gt 0 ]; then
+    # Есть дополнительные аргументы
+    ARGS_STR=""
+    for arg in "$@"; do
+        ARGS_STR="${ARGS_STR} '${arg}'"
+    done
+    docker exec -w /app ${CONTAINER_NAME} sh -c "python manage.py import_courses '${CONTAINER_FILE}'${ARGS_STR}"
+else
+    # Без дополнительных аргументов
+    docker exec -w /app ${CONTAINER_NAME} python manage.py import_courses "${CONTAINER_FILE}"
+fi
 
 # Удаление временного файла
 docker exec ${CONTAINER_NAME} rm -f "${CONTAINER_FILE}"
