@@ -48,25 +48,7 @@ services:
         echo '🔄 Running database migrations...' &&
         python manage.py migrate &&
         echo '👤 Creating/updating admin user...' &&
-        python manage.py shell -c \"
-import os
-from django.contrib.auth import get_user_model
-User = get_user_model()
-email = os.environ.get('ADMIN_EMAIL', 'admin@infralabs.com')
-username = os.environ.get('ADMIN_USERNAME', 'admin')
-password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-if not User.objects.filter(email=email).exists():
-    User.objects.create_superuser(username=username, email=email, password=password)
-    print(f'✅ Created admin user: {email}')
-else:
-    user = User.objects.get(email=email)
-    user.is_superuser = True
-    user.is_staff = True
-    user.username = username
-    user.set_password(password)
-    user.save()
-    print(f'✅ Admin user {email} updated (password reset)')
-\" &&
+        python manage.py shell -c \"import os; from django.contrib.auth import get_user_model; User = get_user_model(); email = os.environ.get('ADMIN_EMAIL', 'admin@infralabs.com'); username = os.environ.get('ADMIN_USERNAME', 'admin'); password = os.environ.get('ADMIN_PASSWORD', 'admin123'); user, created = User.objects.get_or_create(email=email, defaults={'username': username}); user.is_superuser = True; user.is_staff = True; user.username = username; user.set_password(password); user.save(); print('✅ Created admin user: ' + email) if created else print('✅ Admin user ' + email + ' updated (password reset)')\" &&
         echo '📦 Loading demo data...' &&
         python manage.py loaddata fixtures/demo_data.json 2>/dev/null || echo '⚠️  Demo data already loaded or file not found' &&
         echo '📁 Collecting static files...' &&
