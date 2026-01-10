@@ -49,3 +49,22 @@ docker-compose down
 ```bash
 docker-compose down -v
 ```
+
+## Восстановление базы данных из основного проекта
+
+Для восстановления полной БД со всеми данными:
+
+```bash
+# 1. На основном проекте экспортируйте БД:
+#    ./scripts/export-full-db.sh
+#    (или используйте pg_dump вручную)
+
+# 2. Скопируйте файл на сервер:
+#    scp backups/infralabs_full_db_*.sql user@server:/path/to/infralabs-deploy/backups/
+
+# 3. Импортируйте БД (⚠️ заменит всю существующую БД!):
+docker-compose up -d db
+./scripts/import-full-db.sh ./backups/infralabs_full_db_YYYYMMDD_HHMMSS.sql
+```
+
+📖 Подробнее: [docs/DATABASE_RESTORE.md](docs/DATABASE_RESTORE.md)
