@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Environment
+.env
+.env.example
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Backups
+*.sql
+*.dump
+backup_*

@@ -1,0 +1,115 @@
+# Docker Compose для развертывания Infra Labs
+# Использует готовые образы из Docker Hub: elementary1997/infralabs-*
+
+version: '3.8'
+
+services:
+  db:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-db:${VERSION:-latest}
+    container_name: infralabs_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=infralabs
+      - POSTGRES_USER=infralabs_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-infralabs_pass_change_in_prod}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infralabs_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-redis:${VERSION:-latest}
+    container_name: infralabs_redis
+    command: >
+      sh -c "
+        redis-server --appendonly yes &
+        sleep 2 &&
+        redis-cli REPLICAOF NO ONE &&
+        redis-cli CONFIG SET replica-read-only no &&
+        wait
+      "
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-web:${VERSION:-latest}
+    container_name: infralabs_web
+    command: >
+      sh -c "
+        python manage.py migrate &&
+        python manage.py loaddata fixtures/demo_data.json 2>/dev/null || echo 'Demo data already loaded or file not found' &&
+        python manage.py collectstatic --noinput &&
+        gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      "
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-celery_worker:${VERSION:-latest}
+    container_name: infralabs_celery_worker
+    command: celery -A config worker -l info --concurrency=4
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+      - web
+    restart: unless-stopped
+
+  celery_beat:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-celery_beat:${VERSION:-latest}
+    container_name: infralabs_celery_beat
+    command: celery -A config beat -l info
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+      - web
+    restart: unless-stopped
+
+  nginx:
+    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-nginx:${VERSION:-latest}
+    container_name: infralabs_nginx
+    volumes:
+      - static_volume:/static
+      - media_volume:/media
+    ports:
+      - "80:80"
+    networks:
+      - default
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+networks:
+  default:
+    name: infralabs_network
