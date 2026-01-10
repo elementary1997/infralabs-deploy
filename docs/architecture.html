@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infra Labs - Архитектура проекта</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .diagram-container {
+            position: relative;
+            min-height: 800px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+        .connections-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connections-overlay svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .layer {
+            position: relative;
+            z-index: 2;
+        }
+
+        .component {
+            position: relative;
+            z-index: 3;
+        }
+
+        .connection-arrow {
+            stroke: #667eea;
+            stroke-width: 2.5;
+            fill: none;
+            opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+
+        .connection-arrow:hover {
+            stroke-width: 3.5;
+            opacity: 1;
+        }
+
+        .connection-arrow.api {
+            stroke: #2196F3;
+            stroke-dasharray: 5,5;
+            marker-end: url(#arrowhead-blue);
+        }
+
+        .connection-arrow.data {
+            stroke: #9C27B0;
+            marker-end: url(#arrowhead-purple);
+        }
+
+        .connection-arrow.queue {
+            stroke: #FF9800;
+            marker-end: url(#arrowhead-orange);
+        }
+
+        .connection-arrow.storage {
+            stroke: #607D8B;
+            stroke-dasharray: 3,3;
+            marker-end: url(#arrowhead-gray);
+        }
+
+        .connection-arrow.sandbox {
+            stroke: #F44336;
+            marker-end: url(#arrowhead-red);
+        }
+
+        .connection-label {
+            font-size: 11px;
+            fill: #666;
+            background: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .connection-label-bg {
+            fill: white;
+            opacity: 0.9;
+        }
+
+        .layer {
+            margin-bottom: 40px;
+        }
+
+        .layer-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .components {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .component {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            min-width: 250px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .component:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .component::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+        }
+
+        .component.frontend::before { background: #4CAF50; }
+        .component.backend::before { background: #2196F3; }
+        .component.queue::before { background: #FF9800; }
+        .component.data::before { background: #9C27B0; }
+        .component.sandbox::before { background: #F44336; }
+        .component.storage::before { background: #607D8B; }
+
+        .component-icon {
+            font-size: 3em;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .component-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .component-desc {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .component-tech {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .tech-badge {
+            background: #e0e0e0;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            color: #555;
+        }
+
+        .connection-line {
+            stroke: #999;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
+            fill: none;
+            animation: dash 2s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
+
+        .arrow {
+            stroke: #667eea;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+
+        .arrow-label {
+            font-size: 12px;
+            fill: #667eea;
+            font-weight: bold;
+        }
+
+        .info-panel {
+            margin-top: 40px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .info-panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .info-card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-card li {
+            padding: 5px 0;
+            color: #666;
+        }
+
+        .info-card li::before {
+            content: "▸ ";
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .flow-diagram {
+            text-align: center;
+            margin: 40px 0;
+            padding: 30px;
+            background: white;
+            border-radius: 15px;
+        }
+
+        .flow-step {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            min-width: 150px;
+        }
+
+        .flow-arrow {
+            display: inline-block;
+            vertical-align: middle;
+            font-size: 2em;
+            color: #667eea;
+        }
+
+        .port-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .components {
+                flex-direction: column;
+            }
+            
+            .component {
+                min-width: 100%;
+            }
+        }
+
+        .highlight {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 Infra Labs</h1>
+            <p>Архитектура проекта - Interactive Ansible Learning Platform</p>
+        </div>
+
+        <div class="content">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4CAF50;"></div>
+                    <span>Frontend Layer</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2196F3;"></div>
+                    <span>Backend Layer</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF9800;"></div>
+                    <span>Task Queue</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9C27B0;"></div>
+                    <span>Data Layer</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #F44336;"></div>
+                    <span>Sandbox</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #607D8B;"></div>
+                    <span>Storage</span>
+                </div>
+            </div>
+
+            <div class="diagram-container" id="diagramContainer">
+                <!-- SVG Overlay for Connections -->
+                <svg class="connections-overlay" id="connectionsSVG">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#667eea" />
+                        </marker>
+                        <marker id="arrowhead-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#2196F3" />
+                        </marker>
+                        <marker id="arrowhead-purple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#9C27B0" />
+                        </marker>
+                        <marker id="arrowhead-orange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#FF9800" />
+                        </marker>
+                        <marker id="arrowhead-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#F44336" />
+                        </marker>
+                        <marker id="arrowhead-gray" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#607D8B" />
+                        </marker>
+                    </defs>
+                    <!-- Connections will be drawn here by JavaScript -->
+                </svg>
+
+                <!-- Frontend Layer -->
+                <div class="layer">
+                    <div class="layer-title">🌐 Frontend Layer (Пользовательский интерфейс)</div>
+                    <div class="components">
+                        <div class="component frontend" data-component="nginx">
+                            <div class="component-icon">🌍</div>
+                            <div class="component-title">Nginx<span class="port-badge">:80</span></div>
+                            <div class="component-desc">
+                                Reverse Proxy, статические файлы, SSL termination
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Nginx</span>
+                                <span class="tech-badge">SSL/TLS</span>
+                            </div>
+                        </div>
+                        <div class="component frontend" data-component="react">
+                            <div class="component-icon">⚛️</div>
+                            <div class="component-title">React Frontend</div>
+                            <div class="component-desc">
+                                SPA приложение с Monaco Editor для редактирования Ansible playbooks
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">React 18</span>
+                                <span class="tech-badge">Monaco</span>
+                                <span class="tech-badge">Material-UI</span>
+                                <span class="tech-badge">React Query</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backend Layer -->
+                <div class="layer">
+                    <div class="layer-title">⚙️ Backend Layer (API & Admin)</div>
+                    <div class="components">
+                        <div class="component backend" data-component="django-api">
+                            <div class="component-icon">🐍</div>
+                            <div class="component-title">Django REST API<span class="port-badge">:8000</span></div>
+                            <div class="component-desc">
+                                RESTful API для фронтенда, JWT аутентификация, управление курсами и модулями
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Django 5.0+</span>
+                                <span class="tech-badge">DRF</span>
+                                <span class="tech-badge">JWT</span>
+                                <span class="tech-badge">Gunicorn</span>
+                            </div>
+                        </div>
+                        <div class="component backend" data-component="django-admin">
+                            <div class="component-icon">👨‍💼</div>
+                            <div class="component-title">Django Admin</div>
+                            <div class="component-desc">
+                                Административная панель для управления контентом, пользователями, курсами и упражнениями
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Django Admin</span>
+                                <span class="tech-badge">Custom Admin</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Queue Layer -->
+                <div class="layer">
+                    <div class="layer-title">⚡ Task Queue Layer (Асинхронные задачи)</div>
+                    <div class="components">
+                        <div class="component queue" data-component="celery-worker">
+                            <div class="component-icon">🔨</div>
+                            <div class="component-title">Celery Worker</div>
+                            <div class="component-desc">
+                                Выполнение фоновых задач: проверка упражнений, очистка sandbox контейнеров, отправка уведомлений
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Celery</span>
+                                <span class="tech-badge">Concurrency: 4</span>
+                            </div>
+                        </div>
+                        <div class="component queue" data-component="celery-beat">
+                            <div class="component-icon">⏰</div>
+                            <div class="component-title">Celery Beat</div>
+                            <div class="component-desc">
+                                Периодические задачи: очистка старых сессий, обновление статистики, отправка напоминаний
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Celery Beat</span>
+                                <span class="tech-badge">Cron-like</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Layer -->
+                <div class="layer">
+                    <div class="layer-title">💾 Data Layer (Хранилище данных)</div>
+                    <div class="components">
+                        <div class="component data" data-component="postgresql">
+                            <div class="component-icon">🐘</div>
+                            <div class="component-title">PostgreSQL<span class="port-badge">:5432</span></div>
+                            <div class="component-desc">
+                                Основная база данных: пользователи, курсы, модули, уроки, упражнения, прогресс, достижения
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">PostgreSQL 15</span>
+                                <span class="tech-badge">ACID</span>
+                            </div>
+                        </div>
+                        <div class="component data" data-component="redis">
+                            <div class="component-icon">📦</div>
+                            <div class="component-title">Redis<span class="port-badge">:6379</span></div>
+                            <div class="component-desc">
+                                Кеш для сессий и данных, брокер сообщений для Celery, хранение временных данных
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Redis 7</span>
+                                <span class="tech-badge">Cache</span>
+                                <span class="tech-badge">Broker</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sandbox Layer -->
+                <div class="layer">
+                    <div class="layer-title">🐳 Sandbox Layer (Изолированное выполнение)</div>
+                    <div class="components">
+                        <div class="component sandbox" data-component="docker-executor">
+                            <div class="component-icon">🔒</div>
+                            <div class="component-title">Docker Executor</div>
+                            <div class="component-desc">
+                                Создание изолированных контейнеров для выполнения Ansible playbooks, автоматическая очистка, ограничения ресурсов
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Docker-in-Docker</span>
+                                <span class="tech-badge">Ansible</span>
+                                <span class="tech-badge">Timeout: 300s</span>
+                            </div>
+                        </div>
+                        <div class="component sandbox" data-component="test-runner">
+                            <div class="component-icon">✅</div>
+                            <div class="component-title">Test Runner & Validator</div>
+                            <div class="component-desc">
+                                Автоматическая проверка выполнения упражнений, валидация playbooks, сравнение результатов с ожидаемыми
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Ansible Validator</span>
+                                <span class="tech-badge">Test Cases</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage Layer -->
+                <div class="layer">
+                    <div class="layer-title">💿 Storage Layer (Постоянное хранилище)</div>
+                    <div class="components">
+                        <div class="component storage" data-component="static-volume">
+                            <div class="component-icon">📁</div>
+                            <div class="component-title">Static Volume</div>
+                            <div class="component-desc">
+                                Статические файлы Django: CSS, JS, изображения админки
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Docker Volume</span>
+                            </div>
+                        </div>
+                        <div class="component storage" data-component="media-volume">
+                            <div class="component-icon">🖼️</div>
+                            <div class="component-title">Media Volume</div>
+                            <div class="component-desc">
+                                Загруженные файлы: иконки курсов/модулей, аватары пользователей, файлы упражнений
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Docker Volume</span>
+                            </div>
+                        </div>
+                        <div class="component storage" data-component="postgresql-volume">
+                            <div class="component-icon">💾</div>
+                            <div class="component-title">PostgreSQL Data</div>
+                            <div class="component-desc">
+                                Данные базы PostgreSQL (persistent storage)
+                            </div>
+                            <div class="component-tech">
+                                <span class="tech-badge">Docker Volume</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Flow Diagram -->
+                <div class="flow-diagram">
+                    <h2 style="margin-bottom: 30px; color: #667eea;">🔄 Поток данных</h2>
+                    <div class="flow-step">
+                        <strong>Пользователь</strong><br>
+                        Браузер
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>Nginx</strong><br>
+                        Reverse Proxy
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>React / API</strong><br>
+                        Frontend или Django
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <strong>PostgreSQL / Redis</strong><br>
+                        Данные
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="info-panel">
+                <h2>📋 Детальная информация</h2>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <h3>Django Apps</h3>
+                        <ul>
+                            <li><strong>accounts</strong> - Аутентификация и профили пользователей</li>
+                            <li><strong>courses</strong> - Курсы, модули и уроки</li>
+                            <li><strong>exercises</strong> - Практические задания и упражнения</li>
+                            <li><strong>sandbox</strong> - Выполнение кода в изолированных контейнерах</li>
+                            <li><strong>progress</strong> - Отслеживание прогресса и достижений</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Основные API Endpoints</h3>
+                        <ul>
+                            <li><code>/api/auth/</code> - Аутентификация (JWT)</li>
+                            <li><code>/api/courses/</code> - Курсы и модули</li>
+                            <li><code>/api/exercises/</code> - Упражнения</li>
+                            <li><code>/api/sandbox/</code> - Выполнение кода</li>
+                            <li><code>/api/progress/</code> - Прогресс пользователя</li>
+                            <li><code>/admin/</code> - Django Admin панель</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Docker Compose Services</h3>
+                        <ul>
+                            <li><strong>web</strong> - Django + Gunicorn (4 workers)</li>
+                            <li><strong>db</strong> - PostgreSQL 15</li>
+                            <li><strong>redis</strong> - Redis 7 (Cache + Broker)</li>
+                            <li><strong>celery_worker</strong> - Celery Worker (concurrency: 4)</li>
+                            <li><strong>celery_beat</strong> - Celery Beat Scheduler</li>
+                            <li><strong>nginx</strong> - Nginx Reverse Proxy</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Основные возможности</h3>
+                        <ul>
+                            <li>✅ Интерактивный редактор кода (Monaco Editor)</li>
+                            <li>✅ Автоматическая проверка Ansible playbooks</li>
+                            <li>✅ Изолированное выполнение в Docker</li>
+                            <li>✅ Система достижений и прогресса</li>
+                            <li>✅ JWT аутентификация</li>
+                            <li>✅ Админ-панель для управления контентом</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Технологии</h3>
+                        <ul>
+                            <li><strong>Backend:</strong> Django 5.0+, DRF, PostgreSQL, Redis</li>
+                            <li><strong>Frontend:</strong> React 18, Monaco Editor, Material-UI</li>
+                            <li><strong>Queue:</strong> Celery, Redis (broker)</li>
+                            <li><strong>Server:</strong> Gunicorn, Nginx</li>
+                            <li><strong>Containerization:</strong> Docker, Docker Compose</li>
+                            <li><strong>Sandbox:</strong> Docker-in-Docker</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>Сеть и порты</h3>
+                        <ul>
+                            <li><strong>80</strong> - Nginx (HTTP)</li>
+                            <li><strong>8000</strong> - Django/Gunicorn</li>
+                            <li><strong>5432</strong> - PostgreSQL</li>
+                            <li><strong>6379</strong> - Redis</li>
+                            <li><strong>Docker Socket</strong> - /var/run/docker.sock</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                <p style="color: #666; font-size: 0.9em;">
+                    <strong>Infra Labs</strong> - Interactive Ansible Learning Platform<br>
+                    Версия: 1.0.0 | Дата создания схемы: 2025
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Функция для получения позиции компонента
+        function getComponentPosition(componentId) {
+            const component = document.querySelector(`[data-component="${componentId}"]`);
+            if (!component) return null;
+            
+            const container = document.getElementById('diagramContainer');
+            const containerRect = container.getBoundingClientRect();
+            const componentRect = component.getBoundingClientRect();
+            
+            return {
+                x: componentRect.left - containerRect.left + componentRect.width / 2,
+                y: componentRect.top - containerRect.top + componentRect.height / 2,
+                width: componentRect.width,
+                height: componentRect.height
+            };
+        }
+
+        // Функция для определения маркера по классу
+        function getMarkerForClass(className) {
+            const markers = {
+                'api': 'arrowhead-blue',
+                'data': 'arrowhead-purple',
+                'queue': 'arrowhead-orange',
+                'sandbox': 'arrowhead-red',
+                'storage': 'arrowhead-gray'
+            };
+            return markers[className] || 'arrowhead';
+        }
+
+        // Функция для рисования стрелки
+        function drawArrow(svg, fromId, toId, className, label, offsetX = 0, offsetY = 0) {
+            const from = getComponentPosition(fromId);
+            const to = getComponentPosition(toId);
+            
+            if (!from || !to) return null;
+            
+            const x1 = from.x + offsetX;
+            const y1 = from.y + from.height / 2 + offsetY;
+            const x2 = to.x + offsetX;
+            const y2 = to.y - to.height / 2 + offsetY;
+            
+            // Кривая Безье для более красивых стрелок
+            const midY = (y1 + y2) / 2;
+            const midX = (x1 + x2) / 2;
+            const path = `M ${x1} ${y1} Q ${x1} ${midY}, ${midX} ${midY} T ${x2} ${y2}`;
+            
+            const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathElement.setAttribute('d', path);
+            pathElement.setAttribute('class', `connection-arrow ${className}`);
+            pathElement.setAttribute('marker-end', `url(#${getMarkerForClass(className)})`);
+            
+            if (label) {
+                const labelX = midX;
+                const labelY = midY - 10;
+                
+                const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                labelBg.setAttribute('x', labelX - 35);
+                labelBg.setAttribute('y', labelY - 8);
+                labelBg.setAttribute('width', 70);
+                labelBg.setAttribute('height', 16);
+                labelBg.setAttribute('rx', 3);
+                labelBg.setAttribute('fill', 'white');
+                labelBg.setAttribute('opacity', '0.9');
+                svg.appendChild(labelBg);
+                
+                const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                labelText.setAttribute('x', labelX);
+                labelText.setAttribute('y', labelY);
+                labelText.setAttribute('text-anchor', 'middle');
+                labelText.setAttribute('dominant-baseline', 'middle');
+                labelText.setAttribute('font-size', '11px');
+                labelText.setAttribute('fill', '#666');
+                labelText.setAttribute('font-weight', '500');
+                labelText.textContent = label;
+                svg.appendChild(labelText);
+            }
+            
+            svg.appendChild(pathElement);
+            return pathElement;
+        }
+
+        // Функция для рисования всех связей
+        function drawConnections() {
+            const svg = document.getElementById('connectionsSVG');
+            if (!svg) return;
+            
+            // Очищаем предыдущие стрелки (кроме defs)
+            const existingPaths = svg.querySelectorAll('path, text, rect');
+            existingPaths.forEach(el => el.remove());
+            
+            // Ждем завершения загрузки и расчета позиций
+            setTimeout(() => {
+                // Nginx → React Frontend
+                drawArrow(svg, 'nginx', 'react', 'api', 'HTTP');
+                
+                // Nginx → Django REST API
+                drawArrow(svg, 'nginx', 'django-api', 'api', '/api/*');
+                
+                // Nginx → Django Admin
+                drawArrow(svg, 'nginx', 'django-admin', 'api', '/admin/*');
+                
+                // React Frontend → Django REST API
+                drawArrow(svg, 'react', 'django-api', 'api', 'REST API', 50);
+                
+                // Django REST API → PostgreSQL
+                drawArrow(svg, 'django-api', 'postgresql', 'data', 'ORM', -80);
+                
+                // Django REST API → Redis
+                drawArrow(svg, 'django-api', 'redis', 'data', 'Cache', 80);
+                
+                // Django REST API → Docker Executor
+                drawArrow(svg, 'django-api', 'docker-executor', 'sandbox', 'Execute');
+                
+                // Django Admin → PostgreSQL
+                drawArrow(svg, 'django-admin', 'postgresql', 'data', 'ORM', -40);
+                
+                // Celery Worker → Redis (Broker)
+                drawArrow(svg, 'celery-worker', 'redis', 'queue', 'Tasks', -60);
+                
+                // Celery Beat → Redis (Broker)
+                drawArrow(svg, 'celery-beat', 'redis', 'queue', 'Schedule', 60);
+                
+                // Celery Worker → PostgreSQL
+                drawArrow(svg, 'celery-worker', 'postgresql', 'data', 'Save');
+                
+                // Celery Worker → Docker Executor
+                drawArrow(svg, 'celery-worker', 'docker-executor', 'sandbox', 'Cleanup', 40);
+                
+                // Docker Executor → Test Runner
+                drawArrow(svg, 'docker-executor', 'test-runner', 'sandbox', 'Validate');
+                
+                // Test Runner → PostgreSQL
+                drawArrow(svg, 'test-runner', 'postgresql', 'data', 'Results');
+                
+                // Django REST API → Static Volume
+                drawArrow(svg, 'django-api', 'static-volume', 'storage', 'Static', -120);
+                
+                // Django REST API → Media Volume
+                drawArrow(svg, 'django-api', 'media-volume', 'storage', 'Media', 120);
+                
+                // Nginx → Static Volume
+                drawArrow(svg, 'nginx', 'static-volume', 'storage', 'Serve', -40);
+                
+                // Nginx → Media Volume
+                drawArrow(svg, 'nginx', 'media-volume', 'storage', 'Serve', 40);
+                
+                // PostgreSQL → PostgreSQL Data Volume
+                drawArrow(svg, 'postgresql', 'postgresql-volume', 'storage', 'Persist');
+            }, 500);
+        }
+
+        // Добавляем интерактивность компонентам
+        document.querySelectorAll('.component').forEach(component => {
+            component.addEventListener('click', function() {
+                this.classList.toggle('highlight');
+                setTimeout(() => {
+                    this.classList.remove('highlight');
+                }, 2000);
+            });
+            
+            component.addEventListener('mouseenter', function() {
+                // Подсвечиваем связанные стрелки
+                const componentId = this.getAttribute('data-component');
+                if (componentId) {
+                    document.querySelectorAll('.connection-arrow').forEach(arrow => {
+                        const path = arrow.getAttribute('d');
+                        const pos = getComponentPosition(componentId);
+                        if (pos && path) {
+                            // Простая проверка - если путь проходит рядом с компонентом
+                            arrow.style.opacity = '0.9';
+                        }
+                    });
+                }
+            });
+            
+            component.addEventListener('mouseleave', function() {
+                document.querySelectorAll('.connection-arrow').forEach(arrow => {
+                    arrow.style.opacity = '';
+                });
+            });
+        });
+
+        // Анимация появления компонентов
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => {
+                        entry.target.style.opacity = '0';
+                        entry.target.style.transform = 'translateY(20px)';
+                        entry.target.style.transition = 'all 0.5s ease';
+                        
+                        setTimeout(() => {
+                            entry.target.style.opacity = '1';
+                            entry.target.style.transform = 'translateY(0)';
+                        }, 50);
+                    }, index * 100);
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.component').forEach(comp => {
+            observer.observe(comp);
+        });
+
+        // Рисуем связи после загрузки страницы
+        window.addEventListener('load', () => {
+            drawConnections();
+            
+            // Перерисовываем при изменении размера окна
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(drawConnections, 250);
+            });
+        });
+
+        // Также рисуем после небольшой задержки для гарантии
+        setTimeout(drawConnections, 1000);
+    </script>
+</body>
+</html>

@@ -110,3 +110,19 @@ docker-compose up -d db
 ```
 
 📖 Подробнее: [docs/DATABASE_RESTORE.md](docs/DATABASE_RESTORE.md)
+
+## ⚠️ Ошибка: password authentication failed
+
+Если при первом запуске видите ошибку аутентификации PostgreSQL:
+
+```bash
+# Быстрое исправление
+./scripts/fix-db-password.sh
+
+# Или вручную (удалит все данные БД!)
+docker-compose down -v
+export POSTGRES_PASSWORD=$(grep "^POSTGRES_PASSWORD=" .env | cut -d '=' -f2)
+docker-compose up -d
+```
+
+📖 Подробнее: [docs/FIX_PASSWORD_AUTH.md](docs/FIX_PASSWORD_AUTH.md)

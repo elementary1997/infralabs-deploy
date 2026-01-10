@@ -9,6 +9,8 @@ services:
     container_name: infralabs_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
     environment:
       - POSTGRES_DB=infralabs
       - POSTGRES_USER=infralabs_user
