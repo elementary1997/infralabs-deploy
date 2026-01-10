@@ -74,11 +74,24 @@ if [[ "$@" == *"--restore-ids"* ]]; then
     fi
 fi
 
-# Информация о clear-demo
-if [[ "$@" == *"--clear-demo"* ]]; then
-    echo -e "${YELLOW}ℹ️  Будет удалено: тестовые модули (ansible-basics, playbooks-roles, advanced-ansible) и все связанные уроки/упражнения${NC}"
-    echo ""
-fi
+# Информация о clear-demo (поддержка обоих вариантов написания)
+ARGS_FOR_CMD=""
+for arg in "$@"; do
+    # Заменяем --clean-demo на --clear-demo для передачи в команду
+    if [ "$arg" = "--clean-demo" ]; then
+        ARGS_FOR_CMD="${ARGS_FOR_CMD} --clear-demo"
+        echo -e "${YELLOW}ℹ️  Будет удалено: тестовые модули (ansible-basics, playbooks-roles, advanced-ansible) и все связанные уроки/упражнения${NC}"
+        echo ""
+    elif [ "$arg" = "--clear-demo" ]; then
+        ARGS_FOR_CMD="${ARGS_FOR_CMD} --clear-demo"
+        echo -e "${YELLOW}ℹ️  Будет удалено: тестовые модули (ansible-basics, playbooks-roles, advanced-ansible) и все связанные уроки/упражнения${NC}"
+        echo ""
+    else
+        ARGS_FOR_CMD="${ARGS_FOR_CMD} ${arg}"
+    fi
+done
+# Убираем лишний пробел в начале
+ARGS_FOR_CMD=$(echo "$ARGS_FOR_CMD" | sed 's/^ //')
 
 # Копирование файла в контейнер
 CONTAINER_FILE="/tmp/courses_import.json"
@@ -104,10 +117,10 @@ fi
 
 # Выполняем команду в рабочей директории /app
 # Используем sh -c для правильной обработки всех аргументов
-if [ $# -gt 0 ]; then
-    # Есть дополнительные аргументы
+if [ -n "$ARGS_FOR_CMD" ] && [ "$ARGS_FOR_CMD" != "" ]; then
+    # Есть дополнительные аргументы - собираем их правильно
     ARGS_STR=""
-    for arg in "$@"; do
+    for arg in $ARGS_FOR_CMD; do
         ARGS_STR="${ARGS_STR} '${arg}'"
     done
     docker exec -w /app ${CONTAINER_NAME} sh -c "python manage.py import_courses '${CONTAINER_FILE}'${ARGS_STR}"
