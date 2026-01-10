@@ -105,8 +105,15 @@ services:
     volumes:
       - static_volume:/static
       - media_volume:/media
+      - ssl_certs:/etc/nginx/ssl:ro
+      - certbot_data:/var/www/certbot
     ports:
       - "80:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      - ENABLE_SSL=${ENABLE_SSL:-false}
+      - SSL_CERT_PATH=${SSL_CERT_PATH:-/etc/nginx/ssl/cert.pem}
+      - SSL_KEY_PATH=${SSL_KEY_PATH:-/etc/nginx/ssl/key.pem}
     networks:
       - default
     depends_on:
@@ -117,6 +124,10 @@ volumes:
   postgres_data:
   static_volume:
   media_volume:
+  ssl_certs:
+    driver: local
+  certbot_data:
+    driver: local
 
 networks:
   default:

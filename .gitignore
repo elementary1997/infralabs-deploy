@@ -18,6 +18,19 @@ backup_*
 backups/
 !backups/.gitkeep
 
+# Export files
+exports/
+*.json
+!package.json
+!package-lock.json
+
+# SSL certificates
+ssl/
+*.pem
+*.key
+*.crt
+*.cert
+
 # OS files
 .DS_Store
 Thumbs.db

@@ -89,6 +89,45 @@ DJANGO_ALLOWED_HOSTS=server1.example.com,server2.example.com,192.168.1.100
 
 📖 **Подробная документация по настройке ALLOWED_HOSTS:** [docs/ALLOWED_HOSTS.md](docs/ALLOWED_HOSTS.md)
 
+## 🔐 Настройка HTTPS
+
+Для production окружения рекомендуется настроить HTTPS:
+
+### Быстрая настройка (самоподписанный сертификат для тестирования)
+
+```bash
+# Генерация сертификата
+./scripts/generate-ssl-certs.sh yourdomain.com
+
+# Включение SSL
+echo "ENABLE_SSL=true" >> .env
+
+# Перезапуск nginx
+docker-compose restart nginx
+```
+
+### Production (Let's Encrypt)
+
+```bash
+# 1. Получение сертификата через certbot
+sudo certbot certonly --standalone -d yourdomain.com
+
+# 2. Копирование сертификатов в Docker volume
+docker volume create infralabs-deploy_ssl_certs
+sudo docker run --rm \
+    -v infralabs-deploy_ssl_certs:/data \
+    -v /etc/letsencrypt/live/yourdomain.com:/source:ro \
+    alpine sh -c "cp /source/fullchain.pem /data/cert.pem && cp /source/privkey.pem /data/key.pem && chmod 600 /data/key.pem"
+
+# 3. Включение SSL
+echo "ENABLE_SSL=true" >> .env
+
+# 4. Перезапуск nginx
+docker-compose restart nginx
+```
+
+📖 **Подробная документация:** [docs/HTTPS_SETUP.md](docs/HTTPS_SETUP.md)
+
 ```bash
 # 4. Запуск приложения
 docker-compose up -d
@@ -219,6 +258,57 @@ docker-compose up -d db
 ⚠️ **ВАЖНО**: Полное восстановление **ЗАМЕНИТ** всю существующую базу данных, включая всех пользователей и все данные!
 
 📖 Подробная документация: [docs/DATABASE_RESTORE.md](docs/DATABASE_RESTORE.md)
+
+## 📚 Экспорт и импорт курсов
+
+Экспорт/импорт курсов, модулей, уроков и упражнений в JSON формате.
+
+### Экспорт курсов
+
+```bash
+# Базовый экспорт (опубликованные элементы)
+./scripts/export-courses.sh
+
+# С файлами иконок
+./scripts/export-courses.sh --include-files
+
+# С неопубликованными элементами
+./scripts/export-courses.sh --include-unpublished
+
+# Указать путь к файлу
+./scripts/export-courses.sh --output ./backups/my_courses.json
+```
+
+### Импорт курсов
+
+```bash
+# Создание новых элементов
+./scripts/import-courses.sh ./exports/courses_export_20250110_120000.json
+
+# Обновление существующих (по slug)
+./scripts/import-courses.sh ./exports/courses_export.json --update
+
+# Пропуск существующих
+./scripts/import-courses.sh ./exports/courses_export.json --skip-existing
+
+# Восстановление оригинальных ID (⚠️ удалит все существующие данные!)
+./scripts/import-courses.sh ./exports/courses_export.json --restore-ids
+```
+
+### Миграция между серверами
+
+```bash
+# На исходном сервере
+./scripts/export-courses.sh --include-files --output /tmp/courses.json
+
+# Копирование
+scp /tmp/courses.json user@new-server:/path/to/infralabs-deploy/exports/
+
+# На целевом сервере
+./scripts/import-courses.sh ./exports/courses.json
+```
+
+📖 **Подробная документация:** [docs/COURSES_EXPORT_IMPORT.md](docs/COURSES_EXPORT_IMPORT.md)
 
 ### Удаление всех данных (⚠️ ОСТОРОЖНО!)
 
