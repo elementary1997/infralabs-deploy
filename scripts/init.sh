@@ -110,6 +110,126 @@ fi
 echo -e "${GREEN}✅ ALLOWED_HOSTS настроен: ${ALLOWED_HOSTS_INPUT}${NC}"
 echo ""
 
+# Настройка домена для Caddy (HTTPS)
+echo -e "${CYAN}🌐 Настройка домена для Caddy (HTTPS)${NC}"
+echo "   Выберите режим работы:"
+echo "   1) localhost (самоподписанный SSL сертификат)"
+echo "   2) Реальный домен (Let's Encrypt автоматически)"
+read -p "   Введите номер (1 или 2, по умолчанию 1): " CADDY_MODE
+echo ""
+
+if [ -z "$CADDY_MODE" ] || [ "$CADDY_MODE" = "1" ]; then
+    CADDY_DOMAIN="localhost"
+    USE_LETSENCRYPT=false
+    echo -e "   ${YELLOW}Используется localhost с самоподписанным сертификатом${NC}"
+else
+    read -p "   Введите доменное имя (например: example.com): " CADDY_DOMAIN
+    if [ -z "$CADDY_DOMAIN" ]; then
+        CADDY_DOMAIN="localhost"
+        USE_LETSENCRYPT=false
+        echo -e "   ${YELLOW}Домен не указан, используется localhost${NC}"
+    else
+        USE_LETSENCRYPT=true
+        echo -e "   ${GREEN}Используется домен: ${CADDY_DOMAIN} (Let's Encrypt)${NC}"
+    fi
+fi
+
+# Обновление DOMAIN в .env
+if command -v awk &> /dev/null; then
+    awk -v domain="$CADDY_DOMAIN" '/^DOMAIN=/ {print "DOMAIN=" domain; next} 1' .env > .env.tmp && mv .env.tmp .env || echo "DOMAIN=$CADDY_DOMAIN" >> .env
+else
+    if grep -q "^DOMAIN=" .env; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^DOMAIN=.*|DOMAIN=${CADDY_DOMAIN}|" .env
+        else
+            sed -i "s|^DOMAIN=.*|DOMAIN=${CADDY_DOMAIN}|" .env
+        fi
+    else
+        echo "DOMAIN=$CADDY_DOMAIN" >> .env
+    fi
+fi
+
+# Генерация Caddyfile
+echo -e "${CYAN}📝 Генерация Caddyfile...${NC}"
+
+# Определяем режим SSL для комментария
+if [ "$USE_LETSENCRYPT" = "true" ]; then
+    SSL_MODE="Let's Encrypt"
+else
+    SSL_MODE="Самоподписанный сертификат"
+fi
+
+# Генерируем Caddyfile
+cat > Caddyfile << CADDYEOF
+# Caddy конфигурация для автоматического HTTPS
+# Сгенерировано автоматически скриптом init.sh
+# Домен: ${CADDY_DOMAIN}
+# Режим SSL: ${SSL_MODE}
+
+# Редирект HTTP -> HTTPS
+http://${CADDY_DOMAIN} {
+    redir https://${CADDY_DOMAIN}{uri} permanent
+}
+
+# HTTPS сервер
+https://${CADDY_DOMAIN} {
+    # Проксирование на nginx
+    reverse_proxy nginx:80 {
+        # Передача оригинальных заголовков
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Логирование
+    log {
+        output stdout
+        format console
+    }
+
+    # Security headers
+    header {
+        # HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # XSS Protection
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        # Referrer Policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # TLS настройки
+CADDYEOF
+
+# Добавляем TLS настройки в зависимости от режима
+if [ "$USE_LETSENCRYPT" = "true" ]; then
+    cat >> Caddyfile << CADDYEOF
+    # Caddy автоматически получит Let's Encrypt сертификат
+    # Убедитесь, что:
+    # 1. Домен указывает на IP сервера (A запись в DNS)
+    # 2. Порты 80 и 443 открыты в firewall
+CADDYEOF
+else
+    cat >> Caddyfile << CADDYEOF
+    # Используется самоподписанный сертификат для localhost
+    tls internal
+CADDYEOF
+fi
+
+# Закрываем блок HTTPS
+cat >> Caddyfile << CADDYEOF
+}
+CADDYEOF
+
+echo -e "${GREEN}✅ Caddyfile сгенерирован для домена: ${CADDY_DOMAIN}${NC}"
+if [ "$USE_LETSENCRYPT" = "true" ]; then
+    echo -e "${YELLOW}   ⚠️  Убедитесь, что домен ${CADDY_DOMAIN} указывает на IP этого сервера${NC}"
+    echo -e "${YELLOW}   ⚠️  Порты 80 и 443 должны быть открыты в firewall${NC}"
+fi
+echo ""
+
 # Настройка пароля администратора
 echo -e "${CYAN}🔐 Настройка пароля администратора${NC}"
 echo "   Email: admin@infralabs.com"

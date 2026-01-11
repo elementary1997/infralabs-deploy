@@ -1,61 +1,9 @@
 # Caddy конфигурация для автоматического HTTPS
-# Caddy автоматически получает SSL сертификаты через Let's Encrypt
+# Этот файл генерируется автоматически скриптом init.sh
+# Для изменения конфигурации запустите init.sh заново или отредактируйте вручную
 
-# Используем переменную окружения для домена, или localhost по умолчанию
-{$DOMAIN:localhost}
+# ВАЖНО: Этот файл будет перезаписан при следующем запуске init.sh
+# Для постоянных изменений отредактируйте скрипт init.sh
 
-# Редирект HTTP -> HTTPS
-http://{$DOMAIN} {
-    redir https://{$DOMAIN}{uri} permanent
-}
-
-# HTTPS сервер
-https://{$DOMAIN} {
-    # Проксирование на nginx
-    reverse_proxy nginx:80 {
-        # Передача оригинальных заголовков
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
-        header_up X-Forwarded-Proto {scheme}
-    }
-
-    # Логирование
-    log {
-        output stdout
-        format console
-    }
-
-    # Security headers
-    header {
-        # HSTS
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        # XSS Protection
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
-        # Referrer Policy
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
-
-    # TLS настройки
-    # Для localhost: используем самоподписанный сертификат
-    # Для реальных доменов: Caddy автоматически получит сертификат Let's Encrypt
-    # Если домен = localhost, используем internal сертификат
-    # Иначе Caddy автоматически получит Let's Encrypt сертификат
-    @is_localhost {
-        host localhost
-        host 127.0.0.1
-    }
-    tls internal @is_localhost
-    # Для всех остальных доменов Caddy автоматически получит Let's Encrypt сертификат
-}
-
-# Примечания:
-# - Для localhost/127.0.0.1: использует самоподписанный сертификат (tls internal)
-# - Для реальных доменов: автоматически получает сертификат Let's Encrypt
-# - Для получения Let's Encrypt сертификата:
-#   1. Укажите реальный домен в переменной DOMAIN (например: export DOMAIN=yourdomain.com)
-#   2. Убедитесь, что домен указывает на IP сервера (A запись в DNS)
-#   3. Порты 80 и 443 должны быть открыты в firewall
-#   4. Caddy автоматически получит и обновит сертификат
+# По умолчанию используется localhost
+# Для реального домена этот файл будет сгенерирован с правильным доменом
