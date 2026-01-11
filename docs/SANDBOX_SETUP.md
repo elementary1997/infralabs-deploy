@@ -98,7 +98,81 @@ docker-compose logs web --tail=100 | grep -iE "sandbox|error|exception|failed"
 docker logs <sandbox_container_name>
 ```
 
+## Предзагрузка образа sandbox
+
+Для ускорения создания sandbox контейнеров и избежания проблем с загрузкой образа, рекомендуется предзагрузить образ `python:3.11-slim`:
+
+```bash
+./scripts/preload-sandbox-image.sh
+```
+
+Этот скрипт:
+- Проверяет, существует ли образ локально
+- Если нет, загружает его из Docker Hub
+- Показывает инструкции при ошибках
+
+**Важно:** Если сервер не имеет доступа к интернету или Docker Hub недоступен, образ нужно загрузить вручную или импортировать с другого сервера.
+
 ## Устранение проблем
+
+### Проблема: Образ python:3.11-slim не загружается
+
+**Симптомы:**
+- В логах видно "Python base image not found, pulling..."
+- Процесс зависает или выдает ошибку подключения
+- Сообщение "Timeout pulling image" или "Cannot connect to Docker Hub"
+
+**Причины:**
+1. Нет доступа к интернету
+2. Проблемы с DNS
+3. Firewall блокирует доступ к Docker Hub
+4. Проблемы с прокси
+
+**Решение:**
+
+1. **Проверьте доступность Docker Hub:**
+   ```bash
+   ./scripts/test-docker-hub.sh
+   ```
+
+2. **Предзагрузите образ вручную:**
+   ```bash
+   docker pull python:3.11-slim
+   ```
+   Или используйте скрипт:
+   ```bash
+   ./scripts/preload-sandbox-image.sh
+   ```
+
+3. **Если Docker Hub недоступен, импортируйте образ:**
+   ```bash
+   # На сервере с интернетом:
+   docker save python:3.11-slim | gzip > python-3.11-slim.tar.gz
+   
+   # На этом сервере:
+   gunzip -c python-3.11-slim.tar.gz | docker load
+   ```
+
+4. **Проверьте сетевые настройки:**
+   ```bash
+   # Проверка DNS
+   docker exec infralabs_web nslookup registry-1.docker.io
+   
+   # Проверка сетевого подключения
+   docker exec infralabs_web ping -c 2 registry-1.docker.io
+   ```
+
+5. **Если используете прокси, настройте Docker:**
+   ```bash
+   sudo mkdir -p /etc/systemd/system/docker.service.d
+   sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
+   [Service]
+   Environment="HTTP_PROXY=http://proxy.example.com:8080"
+   Environment="HTTPS_PROXY=http://proxy.example.com:8080"
+   EOF
+   sudo systemctl daemon-reload
+   sudo systemctl restart docker
+   ```
 
 ### Проблема: Контейнеры не создаются
 
