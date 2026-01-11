@@ -103,57 +103,21 @@ services:
   nginx:
     image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-nginx:${VERSION:-latest}
     container_name: infralabs_nginx
+    ports:
+      - "80:80"
     volumes:
       - static_volume:/static
       - media_volume:/media
-      - ssl_certs:/etc/nginx/ssl:ro
-      - certbot_data:/var/www/certbot
-    # Убираем внешние порты - nginx будет доступен только через Caddy
-    # ports:
-    #   - "80:80"
-    #   - "${HTTPS_PORT:-443}:443"
-    environment:
-      - ENABLE_SSL=${ENABLE_SSL:-false}
-      - SSL_CERT_PATH=${SSL_CERT_PATH:-/etc/nginx/ssl/cert.pem}
-      - SSL_KEY_PATH=${SSL_KEY_PATH:-/etc/nginx/ssl/key.pem}
     networks:
       - default
     depends_on:
       - web
     restart: unless-stopped
 
-  caddy:
-    image: ${REGISTRY:-docker.io/elementary1997}/${IMAGE_PREFIX:-infralabs}-caddy:${VERSION:-latest}
-    container_name: infralabs_caddy
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"  # Для HTTP/3 (QUIC)
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      - DOMAIN=${DOMAIN:-localhost}
-      - ACME_AGREE=${ACME_AGREE:-true}
-    networks:
-      - default
-    depends_on:
-      - nginx
-    restart: unless-stopped
-
 volumes:
   postgres_data:
   static_volume:
   media_volume:
-  ssl_certs:
-    driver: local
-  certbot_data:
-    driver: local
-  caddy_data:
-    driver: local
-  caddy_config:
-    driver: local
 
 networks:
   default:
