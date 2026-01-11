@@ -342,16 +342,39 @@ if [ "$DB_READY" != "true" ]; then
     exit 1
 fi
 
-# Предзагрузка образа python:3.11-slim для sandbox контейнеров
-echo "📦 Предзагрузка образа python:3.11-slim для sandbox..."
-if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^python:3.11-slim$"; then
-    echo -e "${GREEN}✅ Образ python:3.11-slim уже существует${NC}"
+# Предзагрузка образа sandbox для sandbox контейнеров
+echo "📦 Предзагрузка образа sandbox для sandbox контейнеров..."
+# Загружаем переменные из .env если файл существует
+if [ -f .env ]; then
+    set -a
+    source .env 2>/dev/null || true
+    set +a
+fi
+
+# Определяем registry и image prefix из переменных окружения или используем значения по умолчанию
+SANDBOX_REGISTRY="${REGISTRY:-docker.io/elementary1997}"
+SANDBOX_IMAGE_PREFIX="${IMAGE_PREFIX:-infralabs}"
+SANDBOX_VERSION="${VERSION:-latest}"
+SANDBOX_FULL_IMAGE="${SANDBOX_REGISTRY}/${SANDBOX_IMAGE_PREFIX}-sandbox:${SANDBOX_VERSION}"
+
+# Проверяем, существует ли образ infralabs-sandbox:latest (локальное имя, которое использует код)
+if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^infralabs-sandbox:latest$"; then
+    echo -e "${GREEN}✅ Образ infralabs-sandbox:latest уже существует${NC}"
+elif docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^infralabs/sandbox:latest$"; then
+    echo -e "${GREEN}✅ Образ infralabs/sandbox:latest уже существует${NC}"
+    echo "   Создание тега infralabs-sandbox:latest для совместимости..."
+    docker tag infralabs/sandbox:latest infralabs-sandbox:latest 2>/dev/null || true
+    echo -e "${GREEN}✅ Тег создан${NC}"
 else
-    echo -e "${CYAN}📥 Загрузка образа python:3.11-slim из Docker Hub...${NC}"
-    if docker pull python:3.11-slim 2>/dev/null; then
-        echo -e "${GREEN}✅ Образ python:3.11-slim успешно загружен${NC}"
+    echo -e "${CYAN}📥 Загрузка образа sandbox из registry: ${SANDBOX_FULL_IMAGE}...${NC}"
+    if docker pull "${SANDBOX_FULL_IMAGE}" 2>/dev/null; then
+        echo -e "${GREEN}✅ Образ sandbox успешно загружен${NC}"
+        # Создаем тег infralabs-sandbox:latest для совместимости с кодом
+        docker tag "${SANDBOX_FULL_IMAGE}" infralabs-sandbox:latest 2>/dev/null || true
+        echo -e "${GREEN}✅ Создан тег infralabs-sandbox:latest${NC}"
     else
-        echo -e "${YELLOW}⚠️  Не удалось загрузить образ python:3.11-slim (будет загружен при первом создании sandbox)${NC}"
+        echo -e "${YELLOW}⚠️  Не удалось загрузить образ sandbox из registry${NC}"
+        echo -e "${YELLOW}   (будет использован fallback на python:3.11-slim при первом создании sandbox)${NC}"
     fi
 fi
 echo ""
