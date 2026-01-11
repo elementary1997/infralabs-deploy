@@ -160,25 +160,21 @@ else
 fi
 
 # Генерируем Caddyfile
+# В Caddy v2 для автоматического редиректа HTTP -> HTTPS используем только блок https://
+# Caddy автоматически обработает HTTP запросы и сделает редирект
 cat > Caddyfile << CADDYEOF
 # Caddy конфигурация для автоматического HTTPS
 # Сгенерировано автоматически скриптом init.sh
 # Домен: ${CADDY_DOMAIN}
 # Режим SSL: ${SSL_MODE}
+# Caddy автоматически сделает редирект HTTP -> HTTPS
 
-# Редирект HTTP -> HTTPS
-http://${CADDY_DOMAIN} {
-    redir https://${CADDY_DOMAIN}{uri} permanent
-}
-
-# HTTPS сервер
-https://${CADDY_DOMAIN} {
+${CADDY_DOMAIN} {
     # Проксирование на nginx
     reverse_proxy nginx:80 {
         # Передача оригинальных заголовков
         header_up Host {host}
         header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
     }
 
@@ -200,7 +196,6 @@ https://${CADDY_DOMAIN} {
         Referrer-Policy "strict-origin-when-cross-origin"
     }
 
-    # TLS настройки
 CADDYEOF
 
 # Добавляем TLS настройки в зависимости от режима
@@ -218,7 +213,7 @@ else
 CADDYEOF
 fi
 
-# Закрываем блок HTTPS
+# Закрываем блок
 cat >> Caddyfile << CADDYEOF
 }
 CADDYEOF

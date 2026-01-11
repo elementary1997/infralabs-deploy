@@ -1,9 +1,35 @@
 # Caddy конфигурация для автоматического HTTPS
-# Этот файл генерируется автоматически скриптом init.sh
-# Для изменения конфигурации запустите init.sh заново или отредактируйте вручную
+# Домен: localhost
+# Режим SSL: Самоподписанный сертификат
+# Caddy автоматически сделает редирект HTTP -> HTTPS
 
-# ВАЖНО: Этот файл будет перезаписан при следующем запуске init.sh
-# Для постоянных изменений отредактируйте скрипт init.sh
+localhost {
+    # Проксирование на nginx
+    reverse_proxy nginx:80 {
+        # Передача оригинальных заголовков
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
 
-# По умолчанию используется localhost
-# Для реального домена этот файл будет сгенерирован с правильным доменом
+    # Логирование
+    log {
+        output stdout
+        format console
+    }
+
+    # Security headers
+    header {
+        # HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # XSS Protection
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        # Referrer Policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Используется самоподписанный сертификат для localhost
+    tls internal
+}
