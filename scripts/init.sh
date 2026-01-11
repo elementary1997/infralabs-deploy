@@ -112,17 +112,38 @@ echo ""
 
 # Настройка домена для Caddy (HTTPS)
 echo -e "${CYAN}🌐 Настройка домена для Caddy (HTTPS)${NC}"
+
+# Определяем IP адрес сервера
+SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || \
+            ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K\S+' || \
+            hostname -i 2>/dev/null | awk '{print $1}' || \
+            echo "")
+
 echo "   Выберите режим работы:"
 echo "   1) localhost (самоподписанный SSL сертификат)"
-echo "   2) Реальный домен (Let's Encrypt автоматически)"
-read -p "   Введите номер (1 или 2, по умолчанию 1): " CADDY_MODE
+if [ -n "$SERVER_IP" ]; then
+    echo "   2) IP адрес ($SERVER_IP - самоподписанный SSL сертификат)"
+    echo "   3) Реальный домен (Let's Encrypt автоматически)"
+else
+    echo "   2) Реальный домен (Let's Encrypt автоматически)"
+fi
+read -p "   Введите номер (по умолчанию 1): " CADDY_MODE
 echo ""
 
-if [ -z "$CADDY_MODE" ] || [ "$CADDY_MODE" = "1" ]; then
+if [ -z "$CADDY_MODE" ]; then
+    CADDY_MODE="1"
+fi
+
+if [ "$CADDY_MODE" = "1" ]; then
     CADDY_DOMAIN="localhost"
     USE_LETSENCRYPT=false
     echo -e "   ${YELLOW}Используется localhost с самоподписанным сертификатом${NC}"
-else
+elif [ "$CADDY_MODE" = "2" ] && [ -n "$SERVER_IP" ]; then
+    CADDY_DOMAIN="$SERVER_IP"
+    USE_LETSENCRYPT=false
+    echo -e "   ${YELLOW}Используется IP адрес: ${CADDY_DOMAIN} с самоподписанным сертификатом${NC}"
+elif [ "$CADDY_MODE" = "2" ] && [ -z "$SERVER_IP" ]; then
+    # Если IP не определен, режим 2 = реальный домен
     read -p "   Введите доменное имя (например: example.com): " CADDY_DOMAIN
     if [ -z "$CADDY_DOMAIN" ]; then
         CADDY_DOMAIN="localhost"
@@ -132,6 +153,20 @@ else
         USE_LETSENCRYPT=true
         echo -e "   ${GREEN}Используется домен: ${CADDY_DOMAIN} (Let's Encrypt)${NC}"
     fi
+elif [ "$CADDY_MODE" = "3" ] && [ -n "$SERVER_IP" ]; then
+    read -p "   Введите доменное имя (например: example.com): " CADDY_DOMAIN
+    if [ -z "$CADDY_DOMAIN" ]; then
+        CADDY_DOMAIN="localhost"
+        USE_LETSENCRYPT=false
+        echo -e "   ${YELLOW}Домен не указан, используется localhost${NC}"
+    else
+        USE_LETSENCRYPT=true
+        echo -e "   ${GREEN}Используется домен: ${CADDY_DOMAIN} (Let's Encrypt)${NC}"
+    fi
+else
+    CADDY_DOMAIN="localhost"
+    USE_LETSENCRYPT=false
+    echo -e "   ${YELLOW}Неверный выбор, используется localhost${NC}"
 fi
 
 # Обновление DOMAIN в .env
@@ -208,7 +243,7 @@ if [ "$USE_LETSENCRYPT" = "true" ]; then
 CADDYEOF
 else
     cat >> Caddyfile << CADDYEOF
-    # Используется самоподписанный сертификат для localhost
+    # Используется самоподписанный сертификат (для localhost или IP адреса)
     tls internal
 CADDYEOF
 fi
