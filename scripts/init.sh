@@ -342,6 +342,20 @@ if [ "$DB_READY" != "true" ]; then
     exit 1
 fi
 
+# Предзагрузка образа python:3.11-slim для sandbox контейнеров
+echo "📦 Предзагрузка образа python:3.11-slim для sandbox..."
+if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^python:3.11-slim$"; then
+    echo -e "${GREEN}✅ Образ python:3.11-slim уже существует${NC}"
+else
+    echo -e "${CYAN}📥 Загрузка образа python:3.11-slim из Docker Hub...${NC}"
+    if docker pull python:3.11-slim 2>/dev/null; then
+        echo -e "${GREEN}✅ Образ python:3.11-slim успешно загружен${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Не удалось загрузить образ python:3.11-slim (будет загружен при первом создании sandbox)${NC}"
+    fi
+fi
+echo ""
+
 # Теперь запускаем остальные сервисы
 echo "🚀 Запуск остальных сервисов..."
 docker-compose up -d
