@@ -60,6 +60,44 @@ except Exception as e:
 "
 ```
 
+## Диагностика
+
+Для автоматической диагностики проблем используйте скрипт:
+
+```bash
+./scripts/check-sandbox.sh
+```
+
+Скрипт проверит:
+- ✅ Доступность Docker socket
+- ✅ Работоспособность Docker клиента
+- ✅ Существующие sandbox контейнеры и их статусы
+- ✅ Sandbox сети
+- ✅ Доступность образов
+- ✅ Переменные окружения SANDBOX
+- ✅ Последние логи
+
+### Улучшенное логирование
+
+В коде добавлено детальное логирование на каждом этапе создания контейнера:
+- Создание/поиск сети
+- Поиск/загрузка образа
+- Создание контейнера
+- Проверка статуса контейнера
+- Все ошибки с полным traceback
+
+Для просмотра логов:
+```bash
+# Все логи sandbox
+docker-compose logs web | grep -i sandbox
+
+# Последние 100 строк с ошибками
+docker-compose logs web --tail=100 | grep -iE "sandbox|error|exception|failed"
+
+# Логи конкретного sandbox контейнера
+docker logs <sandbox_container_name>
+```
+
 ## Устранение проблем
 
 ### Проблема: Контейнеры не создаются
@@ -88,25 +126,56 @@ except Exception as e:
 
 ### Проблема: Контейнеры создаются, но не запускаются
 
+**Симптомы:**
+- В логах видно "Sandbox image not found" или "Creating container..."
+- Но нет сообщения "Created sandbox successfully" или "Container status after creation: running"
+- Контейнер создается, но сразу падает (статус: exited)
+
 **Причины:**
-1. Проблемы с сетью
+1. Проблемы с сетью (ошибка при подключении к сети)
 2. Ошибки в образе контейнера
 3. Недостаточно ресурсов
+4. Ошибка при установке Ansible (для python:3.11-slim)
 
 **Решение:**
-1. Проверьте логи контейнера:
+1. Запустите диагностический скрипт:
    ```bash
-   docker logs <container_name>
+   ./scripts/check-sandbox.sh
    ```
 
-2. Проверьте доступность базового образа:
+2. Проверьте подробные логи создания:
+   ```bash
+   docker-compose logs web --tail=200 | grep -iE "sandbox|container|network|error|exception"
+   ```
+
+3. Проверьте логи самого sandbox контейнера:
+   ```bash
+   # Найдите имя контейнера
+   docker ps -a | grep sandbox
+   
+   # Просмотрите логи
+   docker logs <sandbox_container_name>
+   ```
+
+4. Проверьте доступность базового образа:
    ```bash
    docker images | grep python:3.11-slim
+   # Если нет, образ будет загружен автоматически
    ```
 
-3. Проверьте ресурсы системы:
+5. Проверьте ресурсы системы:
    ```bash
    docker stats
+   ```
+
+6. Проверьте, что контейнер действительно создается:
+   ```bash
+   docker ps -a | grep infralabs_sandbox
+   ```
+
+7. Если контейнер создается, но сразу падает, проверьте причину:
+   ```bash
+   docker inspect <sandbox_container_name> | grep -A 10 "State"
    ```
 
 ### Проблема: Контейнеры создаются, но упражнения не выполняются
@@ -145,15 +214,64 @@ services:
 
 ## Логирование
 
+### Настройка уровня логирования
+
 Для отладки включите DEBUG логирование в `.env`:
 ```bash
 DJANGO_DEBUG=True
+LOG_LEVEL=DEBUG
 ```
 
-Логи sandbox будут в:
+### Просмотр логов
+
+**Все логи sandbox:**
 ```bash
 docker-compose logs web | grep -i sandbox
+```
+
+**Последние логи с ошибками:**
+```bash
+docker-compose logs web --tail=100 | grep -iE "sandbox|error|exception|failed|created|container"
+```
+
+**Логи Celery worker:**
+```bash
 docker-compose logs celery_worker | grep -i sandbox
+```
+
+**Логи конкретного sandbox контейнера:**
+```bash
+docker logs <sandbox_container_name> --tail=50
+```
+
+**Поиск конкретной ошибки:**
+```bash
+docker-compose logs web 2>&1 | grep -A 10 -B 5 "Failed to create sandbox"
+```
+
+### Что логируется
+
+При создании sandbox контейнера логируется:
+1. ✅ Начало создания (пользователь, имя контейнера)
+2. ✅ Создание/поиск сети
+3. ✅ Поиск/загрузка образа
+4. ✅ Создание контейнера
+5. ✅ Подключение к сети
+6. ✅ Проверка статуса контейнера
+7. ✅ Получение IP адреса
+8. ✅ Создание inventory файла
+9. ✅ Все ошибки с полным traceback
+
+Пример успешного лога:
+```
+INFO Starting sandbox creation for user: user@example.com, container: infralabs_sandbox_user_example_com
+INFO Creating new network: infralabs_net_user_example_com
+INFO Successfully created network: infralabs_net_user_example_com
+INFO Sandbox image not found, using python:3.11-slim with Ansible installation
+INFO Creating container infralabs_sandbox_user_example_com with Python base image and Ansible installation...
+INFO Container infralabs_sandbox_user_example_com created successfully, ID: abc123
+INFO Container status after creation: running
+INFO Created sandbox: infralabs_sandbox_user_example_com (single container), IP: 172.20.0.2, ID: abc123
 ```
 
 ## Автоматическая очистка
